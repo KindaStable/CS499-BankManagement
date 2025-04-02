@@ -13,6 +13,8 @@
 
 ### Installed via Other Packages
 
+- pip install -r requirements.txt
+
 - dnspython *(via email_validator)*  
 - WTForms *(via Flask-WTF)*  
 - python-dateutil *(via pandas)*  

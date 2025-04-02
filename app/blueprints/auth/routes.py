@@ -23,6 +23,7 @@ from app.blueprints.sharedUtilities import (
 # ====================
 
 auth_bp = Blueprint('auth', __name__, template_folder='templates')
+customer_bp = Blueprint('customer', __name__, template_folder='templates')
 
 # ====================
 # Constants

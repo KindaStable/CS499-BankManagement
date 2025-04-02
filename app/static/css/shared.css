@@ -106,8 +106,10 @@ header {
 /* Navigation list styling within the header */
 .header__nav ul {
     list-style: none;
+    /* Remove default list styling */
     display: flex;
     flex-direction: column;
+    /* Stack items vertically on mobile */
     gap: 0.625rem;
     align-items: center; /* Centers the nav buttons */
 }

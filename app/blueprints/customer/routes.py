@@ -1,10 +1,15 @@
 import pandas as pd
-from flask import Blueprint, render_template, Response, redirect, url_for
+import hashlib
+from flask import ( Blueprint, render_template, Response,
+    redirect, url_for, flash, session
+)
 from app.blueprints.sharedUtilities import (
     get_csv_path, get_logged_in_customer,
     get_customer_accounts, 
     login_required, flash_error
 )
+from app.blueprints.customer import forms
+from scripts.customer import modifyInfo
 
 # Create a Blueprint for the customer-related routes
 customer_bp = Blueprint('customer', __name__, template_folder='templates')
@@ -73,3 +78,80 @@ def account_detail(account_id: int) -> Response:
     except Exception as e:
         # If there is an error retrieving account details, show an error message and redirect
         flash_error("Error retrieving account details.")
+
+@customer_bp.route('/settings', methods=['GET', 'POST'])
+@login_required("customer_id")
+def settings():
+    form = forms.SettingsForm()
+    username = session.get("user")
+    if not username:
+        flash("You must be logged in to access settings.", "warning")
+        return redirect(url_for('auth.login'))
+
+    # Load user data from CSVs
+    cust_df = pd.read_csv(get_csv_path("customers.csv"))
+    per_df = pd.read_csv(get_csv_path("persons.csv"))
+
+    try:
+        customer_id = cust_df.loc[cust_df['Username'] == username, 'CustomerID'].iloc[0]
+    except IndexError:
+        flash_error("User not found.")
+        return redirect(url_for('auth.login'))
+
+    person_idx = per_df.index[per_df['ID'] == customer_id].tolist()
+    if not person_idx:
+        flash_error("Customer data not found.")
+        return redirect(url_for('auth.login'))
+
+    idx = person_idx[0]
+
+    if form.validate_on_submit():
+        changes = {}
+        newUser = form.username.data.strip()
+
+        if form.first_name.data.strip() != str(per_df.at[idx, 'FirstName']).strip():
+            changes['First Name'] = form.first_name.data.strip()
+        if form.last_name.data.strip() != str(per_df.at[idx, 'LastName']).strip():
+            changes['Last Name'] = form.last_name.data.strip()
+        if form.phone.data.strip() != str(per_df.at[idx, 'PhoneNum']).strip():
+            changes['Phone Number'] = form.phone.data.strip()
+        if form.email.data.strip() != str(per_df.at[idx, 'Email']).strip():
+            changes['Email'] = form.email.data.strip()
+        if form.address.data.strip() != str(per_df.at[idx, 'Address']).strip():
+            changes['Address'] = form.address.data.strip()
+        if newUser != username:
+            per_df.at[idx, 'Username'] = newUser
+            per_df.to_csv(get_csv_path("persons.csv"), index=False)
+
+            cust_df.loc[cust_df['Username'] == username, 'Username'] = newUser
+            cust_df.to_csv(get_csv_path("customers.csv"), index=False)
+
+            session['user'] = newUser
+            changes['Username'] = newUser
+        if form.password.data.strip():
+            hashed_pw = hashlib.sha512(form.password.data.strip().encode()).hexdigest()
+            changes['Password'] = hashed_pw
+
+        if changes:
+            messages = []
+            success = True
+            for key, value in changes.items():
+                result = modifyInfo.modify_info(customer_id, {key: value})
+                messages.append(result["message"])
+                if result["status"] != "success":
+                    success = False
+            flash(" | ".join(messages), "success" if success else "danger")
+        else:
+            flash("No changes were made.", "info")
+
+        return redirect(url_for('customer.settings'))
+
+    # Pre-fill form values
+    form.first_name.data = per_df.at[idx, 'FirstName']
+    form.last_name.data = per_df.at[idx, 'LastName']
+    form.phone.data = per_df.at[idx, 'PhoneNum']
+    form.email.data = per_df.at[idx, 'Email']
+    form.address.data = per_df.at[idx, 'Address']
+    form.username.data = username
+
+    return render_template("customer/settings.html", form=form, title="User Settings")
